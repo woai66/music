@@ -138,6 +138,10 @@ void tp_adjust(void);                                          /* 触摸屏校�
 /* 测试和调试函数 */
 void tp_draw_big_point(uint16_t x, uint16_t y, uint16_t color);    /* 画大点(用于测试) */
 
+/* 校准参数保存和读取 */
+void tp_save_adjust_data(void);     /* 保存校准参数 */
+uint8_t tp_get_adjust_data(void);   /* 读取校准参数 */
+
 /* 调试函数 */
 void tp_read_xy(uint16_t *x, uint16_t *y);  /* 读取原始坐标 */
 uint16_t tp_test_spi(void);                 /* 测试SPI通信 */

@@ -320,6 +320,10 @@ void tp_adjust(void)
     double px, py;          /* X,Y轴物理坐标比例,用于判定是否校准成功 */
     uint16_t outtime = 0;
 
+    /* 保存当前背景色，设置白色背景用于校准 */
+    uint16_t old_back_color = g_back_color;
+    g_back_color = WHITE;
+    
     lcd_clear(WHITE);       /* 清屏 */
     lcd_show_string(40, 40, 280, 100, 16, "Please touch the cross", RED); /* 显示提示信息 */
     lcd_show_string(40, 60, 280, 100, 16, "on the screen to calibrate", RED); 
@@ -398,8 +402,13 @@ void tp_adjust(void)
                     lcd_clear(WHITE);   /* 清屏 */
                     lcd_show_string(35, 110, lcddev.width, lcddev.height, 16, "Touch Screen Adjust OK!", BLUE); /* 校正完成 */
                     HAL_Delay(1000);
+                    
+                    /* 自动保存校准参数 */
+                    tp_save_adjust_data();
 
-                    lcd_clear(BLACK);/* 清屏 */
+                    /* 恢复背景色并清屏 */
+                    g_back_color = old_back_color;
+                    lcd_clear(g_back_color);/* 清屏为原来的背景色 */
                     return;/* 校正完成 */
             }
         }
@@ -414,6 +423,10 @@ void tp_adjust(void)
             tp_dev.yfac = 0.098f;  
             tp_dev.xc = 2048;
             tp_dev.yc = 2048;
+            
+            /* 恢复背景色并清屏 */
+            g_back_color = old_back_color;
+            lcd_clear(g_back_color);
             break;
         }
     }
@@ -476,8 +489,23 @@ uint8_t tp_init(void)
         /* 初始化触摸屏 */
         tp_read_xy(&tp_dev.x[0], &tp_dev.y[0]); /* 第一次读取初始化 */
         
-        /* 设置默认校准参数 */
-        tp_adjust();
+        /* 检查是否存在校准数据 */
+        if (tp_get_adjust_data() == 0)
+        {
+            /* 不存在校准数据，进行校准 */
+            tp_adjust();
+            /* 保存校准数据 */
+            tp_save_adjust_data();
+        }
+        else
+        {
+            /* 存在校准数据，加载校准参数 */
+            lcd_clear(WHITE);
+            lcd_show_string(40, 40, 280, 100, 16, "Touch Screen Ready!", BLUE);
+            HAL_Delay(1000);
+            /* 恢复背景色 */
+            lcd_clear(g_back_color);
+        }
         
         return 0;           /* 初始化完成 */
     }
@@ -507,4 +535,76 @@ bool hr2046_read(uint16_t *x, uint16_t *y, uint16_t *z)
         return true;
     }
     return false;
+} 
+
+/* 触摸屏校准参数保存在Flash的地址（最后一页） */
+#define TP_SAVE_ADDR_BASE   0x0807F000  /* STM32F103ZET6的最后一页地址 */
+#define TP_SAVE_FLAG        0x0A55      /* 校准标志 */
+
+/**
+ * @brief       保存校准参数到Flash
+ * @note        将校准参数保存在Flash的最后一页
+ * @param       无
+ * @retval      无
+ */
+void tp_save_adjust_data(void)
+{
+    uint32_t data[4];
+    
+    /* 准备要保存的数据 */
+    data[0] = *(uint32_t*)&tp_dev.xfac;  /* xfac */
+    data[1] = *(uint32_t*)&tp_dev.yfac;  /* yfac */
+    data[2] = (uint32_t)tp_dev.xc;       /* xc */
+    data[3] = (uint32_t)tp_dev.yc;       /* yc */
+    
+    /* 解锁Flash */
+    HAL_FLASH_Unlock();
+    
+    /* 擦除最后一页 */
+    FLASH_EraseInitTypeDef erase_struct;
+    uint32_t page_error = 0;
+    
+    erase_struct.TypeErase = FLASH_TYPEERASE_PAGES;
+    erase_struct.PageAddress = TP_SAVE_ADDR_BASE;
+    erase_struct.NbPages = 1;
+    
+    HAL_FLASHEx_Erase(&erase_struct, &page_error);
+    
+    /* 写入校准标志 */
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, TP_SAVE_ADDR_BASE, TP_SAVE_FLAG);
+    
+    /* 写入校准参数 */
+    for (int i = 0; i < 4; i++)
+    {
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, TP_SAVE_ADDR_BASE + 4 + i * 4, data[i]);
+    }
+    
+    /* 锁定Flash */
+    HAL_FLASH_Lock();
+}
+
+/**
+ * @brief       从Flash读取校准参数
+ * @param       无
+ * @retval      0: 读取失败，需要重新校准
+ *              1: 读取成功
+ */
+uint8_t tp_get_adjust_data(void)
+{
+    uint16_t flag = *(uint16_t*)TP_SAVE_ADDR_BASE;
+    
+    if (flag == TP_SAVE_FLAG)
+    {
+        /* 读取校准参数 */
+        uint32_t* data = (uint32_t*)(TP_SAVE_ADDR_BASE + 4);
+        
+        tp_dev.xfac = *(float*)&data[0];
+        tp_dev.yfac = *(float*)&data[1]; 
+        tp_dev.xc = (uint16_t)data[2];
+        tp_dev.yc = (uint16_t)data[3];
+        
+        return 1;  /* 校准参数有效 */
+    }
+    
+    return 0;  /* 没有有效的校准参数 */
 } 

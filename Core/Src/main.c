@@ -26,9 +26,11 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdbool.h>
 #include "nt35310_alientek.h"
 #include "hr2046.h"
 #include "vs1053_port.h"
+#include "lcdfont.h"
 
 // External function declaration
 void lcd_basic_test(void);
@@ -63,6 +65,24 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/**
+ * @brief       绘制标准界面
+ * @param       status_text: 状态文字
+ * @retval      无
+ */
+void draw_standard_ui(const char* status_text)
+{
+  /* 确保背景色为白色 */
+  g_back_color = WHITE;
+  lcd_clear(WHITE);
+  
+  /* 绘制标准界面 */
+  lcd_show_string(10, 10, 300, 32, 16, "STM32 Music Player", BLACK);
+  lcd_show_string(10, 90, 300, 32, 12, status_text, BLUE);
+  lcd_draw_rectangle(5, 120, 315, 470, BLACK);
+  lcd_show_string(10, 130, 300, 32, 12, "Touch to draw", BLACK);
+  lcd_show_string(10, 150, 300, 32, 12, "KEY0: Re-calibrate", BLACK);
+}
 
 /* USER CODE END 0 */
 
@@ -103,39 +123,59 @@ int main(void)
   /* 初始化LCD - 使用正点原子的方式 */
   lcd_init();
   
-  /* 初始化触摸屏 */
-  uint8_t tp_init_result = tp_dev.init();
+  /* 设置背景色为白色 */
+  g_back_color = WHITE;
   
-  /* 设置背景色为黑色 */
-  g_back_color = BLACK;
-  
-  /* 清屏为黑色 */
-  lcd_clear(BLACK);
+  /* 清屏为白色 */
+  lcd_clear(WHITE);
   
   /* 显示文字测试 - 使用真正的字体 */
-  lcd_show_string(10, 10, 300, 32, 16, "HELLO STM32!", WHITE);
-  lcd_show_string(10, 40, 300, 32, 16, "Touch Music Player", GREEN);
+  lcd_show_string(10, 10, 300, 32, 16, "STM32 Music Player", BLACK);
+  lcd_show_string(10, 40, 300, 32, 16, "Initializing...", BLUE);
   
   /* 显示LCD ID信息 */
   char text[30];
   sprintf((char *)text, "LCD ID: 0x%X", lcddev.id);
-  lcd_show_string(10, 70, 300, 32, 12, text, YELLOW);
+  lcd_show_string(10, 70, 300, 32, 12, text, RED);
   
-  /* 显示触摸屏初始化结果 */
-  if (tp_init_result == 0)
+  /* 检查是否需要强制校准 (KEY0按下) */
+  bool force_calibration = false;
+  if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* KEY0按下 */
   {
-    lcd_show_string(10, 90, 300, 32, 12, "Touch: Ready", CYAN);
+    force_calibration = true;
+    lcd_show_string(10, 90, 300, 32, 12, "Force Calibration", RED);
+    HAL_Delay(1000);
+  }
+  
+  /* 初始化触摸屏 */
+  if (force_calibration)
+  {
+    /* 强制重新校准 */
+    tp_dev.touchtype = 0;
+    tp_dev.touchtype |= lcddev.dir & 0X01;
+    tp_adjust();
+    tp_save_adjust_data();
+    
+    /* 恢复标准界面 */
+    draw_standard_ui("Touch: Calibrated");
   }
   else
   {
-    lcd_show_string(10, 90, 300, 32, 12, "Touch: Error", RED);
+    uint8_t tp_init_result = tp_dev.init();
+    if (tp_init_result == 0)
+    {
+      lcd_show_string(10, 90, 300, 32, 12, "Touch: Ready", BLUE);
+      
+      /* 绘制界面元素 */
+      lcd_draw_rectangle(5, 120, 315, 470, BLACK);
+      lcd_show_string(10, 130, 300, 32, 12, "Touch to draw", BLACK);
+      lcd_show_string(10, 150, 300, 32, 12, "KEY0: Re-calibrate", BLACK);
+    }
+    else
+    {
+      lcd_show_string(10, 90, 300, 32, 12, "Touch: Error", RED);
+    }
   }
-  
-  /* 绘制一个简单的边框 */
-  lcd_draw_rectangle(5, 120, 315, 470, WHITE);
-  
-  /* 显示触摸区域提示 */
-  lcd_show_string(10, 130, 300, 32, 12, "Touch to draw:", WHITE);
   
   /* USER CODE END 2 */
 
@@ -143,6 +183,31 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* 检查KEY0是否按下，进行重新校准 */
+    static uint8_t key0_pressed = 0;
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* KEY0按下 */
+    {
+      if (!key0_pressed)
+      {
+        key0_pressed = 1;
+        HAL_Delay(50);  /* 消抖 */
+        
+        if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* 确认按下 */
+        {
+          /* 重新校准 */
+          tp_adjust();
+          tp_save_adjust_data();
+          
+          /* 恢复标准界面 */
+          draw_standard_ui("Touch: Re-calibrated");
+        }
+      }
+    }
+    else
+    {
+      key0_pressed = 0;
+    }
+    
     /* 触摸屏扫描 */
     tp_dev.scan(0);  /* 扫描触摸屏，使用屏幕坐标模式 */
     
@@ -153,7 +218,7 @@ int main(void)
           tp_dev.x[0] != 0xFFFF && tp_dev.y[0] != 0xFFFF)
       {
         /* 在触摸区域内画红点 */
-        if (tp_dev.y[0] > 140)  /* 只在下方区域画点，避免覆盖文字 */
+        if (tp_dev.y[0] > 160)  /* 只在下方区域画点，避免覆盖文字 */
         {
           tp_draw_big_point(tp_dev.x[0], tp_dev.y[0], RED);
         }
@@ -161,7 +226,7 @@ int main(void)
         /* 显示当前坐标 */
         char coord_str[50];
         sprintf(coord_str, "X:%03d Y:%03d     ", tp_dev.x[0], tp_dev.y[0]);
-        lcd_show_string(200, 90, 100, 32, 12, coord_str, GREEN);
+        lcd_show_string(200, 90, 100, 32, 12, coord_str, BLUE);
       }
     }
     
@@ -170,18 +235,18 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* LED闪烁指示程序运行 */
-    static uint32_t led_counter = 0;
-    led_counter++;
-    
-    if (led_counter % 50 == 0)  /* 每500ms切换一次LED */
-    {
-      HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5); // LED1 toggle
-    }
-    if (led_counter % 100 == 0)  /* 每1秒切换一次LED */
-    {
-      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_5); // LED0 toggle  
-    }
+    /* LED闪烁指示程序不运行  */
+    // static uint32_t led_counter = 0;
+    // led_counter++;
+    //
+    // if (led_counter % 5000 == 0)  /* 降低LED闪烁频率 */
+    // {
+    //   HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5); // LED1 toggle
+    // }
+    // if (led_counter % 10000 == 0)  /* 降低LED闪烁频率 */
+    // {
+    //   HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_5); // LED0 toggle
+    // }
   }
   /* USER CODE END 3 */
 }
