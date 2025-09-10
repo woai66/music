@@ -25,8 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
 #include "nt35310_alientek.h"
-#include "lcdfont.h"
 #include "hr2046.h"
 #include "vs1053_port.h"
 
@@ -103,6 +103,9 @@ int main(void)
   /* 初始化LCD - 使用正点原子的方式 */
   lcd_init();
   
+  /* 初始化触摸屏 */
+  uint8_t tp_init_result = tp_dev.init();
+  
   /* 设置背景色为黑色 */
   g_back_color = BLACK;
   
@@ -111,26 +114,28 @@ int main(void)
   
   /* 显示文字测试 - 使用真正的字体 */
   lcd_show_string(10, 10, 300, 32, 16, "HELLO STM32!", WHITE);
-  lcd_show_string(10, 40, 300, 32, 16, "LCD Working!", GREEN);
-  lcd_show_string(10, 70, 300, 32, 12, "Font Test 12px", YELLOW);
-  lcd_show_string(10, 100, 300, 32, 16, "Font Test 16px", CYAN);
+  lcd_show_string(10, 40, 300, 32, 16, "Touch Music Player", GREEN);
   
-  /* 绘制一些简单图形确认显示正常 */
-  lcd_draw_rectangle(10, 140, 310, 180, BLUE);
-  lcd_fill(15, 145, 305, 175, RED);
+  /* 显示LCD ID信息 */
+  char text[30];
+  sprintf((char *)text, "LCD ID: 0x%X", lcddev.id);
+  lcd_show_string(10, 70, 300, 32, 12, text, YELLOW);
   
-  /* 显示彩色方块 */
-  lcd_fill(20, 200, 50, 230, RED);
-  lcd_fill(60, 200, 90, 230, GREEN);
-  lcd_fill(100, 200, 130, 230, BLUE);
-  lcd_fill(140, 200, 170, 230, CYAN);
-  lcd_fill(180, 200, 210, 230, MAGENTA);
-  lcd_fill(220, 200, 250, 230, YELLOW);
+  /* 显示触摸屏初始化结果 */
+  if (tp_init_result == 0)
+  {
+    lcd_show_string(10, 90, 300, 32, 12, "Touch: Ready", CYAN);
+  }
+  else
+  {
+    lcd_show_string(10, 90, 300, 32, 12, "Touch: Error", RED);
+  }
   
-  /* 显示更多文字信息 */
-  lcd_show_string(10, 250, 300, 32, 12, "STM32F103ZET6 - Alientek V3", WHITE);
-  lcd_show_string(10, 270, 300, 32, 12, "NT35310 LCD Driver Test", GREEN);
-  lcd_show_string(10, 290, 300, 32, 12, "Font Display Working!", CYAN);
+  /* 绘制一个简单的边框 */
+  lcd_draw_rectangle(5, 120, 315, 470, WHITE);
+  
+  /* 显示触摸区域提示 */
+  lcd_show_string(10, 130, 300, 32, 12, "Touch to draw:", WHITE);
   
   /* USER CODE END 2 */
 
@@ -138,16 +143,45 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* 触摸屏扫描 */
+    tp_dev.scan(0);  /* 扫描触摸屏，使用屏幕坐标模式 */
+    
+    if (tp_dev.sta & TP_PRES_DOWN)  /* 触摸屏被按下 */
+    {
+      /* 检查坐标有效性 */
+      if (tp_dev.x[0] < lcddev.width && tp_dev.y[0] < lcddev.height && 
+          tp_dev.x[0] != 0xFFFF && tp_dev.y[0] != 0xFFFF)
+      {
+        /* 在触摸区域内画红点 */
+        if (tp_dev.y[0] > 140)  /* 只在下方区域画点，避免覆盖文字 */
+        {
+          tp_draw_big_point(tp_dev.x[0], tp_dev.y[0], RED);
+        }
+        
+        /* 显示当前坐标 */
+        char coord_str[50];
+        sprintf(coord_str, "X:%03d Y:%03d     ", tp_dev.x[0], tp_dev.y[0]);
+        lcd_show_string(200, 90, 100, 32, 12, coord_str, GREEN);
+      }
+    }
+    
+    // HAL_Delay(10);  /* 延时10ms */
+    
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    
     /* LED闪烁指示程序运行 */
-    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5); // LED1 toggle
-    HAL_Delay(500);
+    static uint32_t led_counter = 0;
+    led_counter++;
     
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_5); // LED0 toggle  
-    HAL_Delay(500);
+    if (led_counter % 50 == 0)  /* 每500ms切换一次LED */
+    {
+      HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5); // LED1 toggle
+    }
+    if (led_counter % 100 == 0)  /* 每1秒切换一次LED */
+    {
+      HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_5); // LED0 toggle  
+    }
   }
   /* USER CODE END 3 */
 }
