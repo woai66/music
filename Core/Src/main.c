@@ -20,6 +20,7 @@
 #include "main.h"
 #include "sdio.h"
 #include "spi.h"
+#include "usart.h"
 #include "gpio.h"
 #include "fsmc.h"
 
@@ -31,6 +32,7 @@
 #include "hr2046.h"
 #include "vs1053_port.h"
 #include "lcdfont.h"
+#include "sdio_sdcard.h"
 
 // External function declaration
 void lcd_basic_test(void);
@@ -116,9 +118,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_FSMC_Init();
-  // MX_SDIO_SD_Init();
+  MX_SDIO_SD_Init();
   MX_SPI1_Init();
   MX_SPI2_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   /* 初始化LCD - 使用正点原子的方式 */
   lcd_init();
@@ -177,6 +180,29 @@ int main(void)
     }
   }
   
+  /* 初始化SD卡 */
+  lcd_show_string(10, 110, 300, 32, 12, "Initializing SD card...", BLUE);
+  HAL_Delay(100);  /* 给LCD一点时间显示 */
+  
+  uint8_t sd_init_result = sd_init();
+  if (sd_init_result == 0)
+  {
+    lcd_show_string(10, 110, 300, 32, 12, "SD Card: OK        ", GREEN);
+    show_sdcard_info();  /* 显示SD卡信息 */
+    show_sd_debug_info(); /* 显示调试信息 */
+    
+    /* 添加按键说明 */
+    lcd_show_string(10, 260, 300, 16, 12, "KEY0: Re-calibrate touch", BLACK);
+    lcd_show_string(10, 280, 300, 16, 12, "KEY1: Test SD read sector 0", BLACK);
+  }
+  else
+  {
+    char error_str[40];
+    sprintf(error_str, "SD Card: Error (code:%d)", sd_init_result);
+    lcd_show_string(10, 110, 300, 32, 12, error_str, RED);
+    lcd_show_string(10, 130, 300, 32, 12, "Please check SD card", RED);
+  }
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -208,6 +234,27 @@ int main(void)
       key0_pressed = 0;
     }
     
+    /* 检查KEY1是否按下，测试SD卡读取 */
+    static uint8_t key1_pressed = 0;
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* KEY1按下 */
+    {
+      if (!key1_pressed)
+      {
+        key1_pressed = 1;
+        HAL_Delay(50);  /* 消抖 */
+        
+        if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* 确认按下 */
+        {
+          /* 测试SD卡读取 */
+          sd_test_read(0, 1);  /* 读取第0扇区 */
+        }
+      }
+    }
+    else
+    {
+      key1_pressed = 0;
+    }
+    
     /* 触摸屏扫描 */
     tp_dev.scan(0);  /* 扫描触摸屏，使用屏幕坐标模式 */
     
@@ -229,9 +276,10 @@ int main(void)
         lcd_show_string(200, 90, 100, 32, 12, coord_str, BLUE);
       }
     }
+
     
     // HAL_Delay(10);  /* 延时10ms */
-    
+    // HAL_UART_Transmit(&huart1,(uint8_t *)"666", 3, 1);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

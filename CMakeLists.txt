@@ -60,6 +60,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/lcd/lcdfont.c
     BSP/touch/hr2046.c
     BSP/audio/vs1053_port.c
+    BSP/sdcard/sdio_sdcard.c
     
     # Startup file
     startup_stm32f103xe.s
@@ -71,6 +72,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/lcd
     BSP/touch
     BSP/audio
+    BSP/sdcard
 )
 
 # Add project symbols (macros)
