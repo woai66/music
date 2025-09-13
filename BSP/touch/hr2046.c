@@ -607,4 +607,81 @@ uint8_t tp_get_adjust_data(void)
     }
     
     return 0;  /* 没有有效的校准参数 */
+}
+
+/* ============================================================================
+ * 触摸屏测试管理函数
+ * ============================================================================ */
+
+/**
+ * @brief       处理校准检查(KEY0按键)
+ * @param       无
+ * @retval      无
+ */
+void tp_handle_calibration_check(void)
+{
+    static uint8_t key0_pressed = 0;
+    
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* KEY0按下 */
+    {
+        if (!key0_pressed)
+        {
+            key0_pressed = 1;
+            HAL_Delay(50);  /* 消抖 */
+            
+            if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* 确认按下 */
+            {
+                /* 重新校准 */
+                tp_adjust();
+                tp_save_adjust_data();
+                
+                /* 恢复标准界面 */
+                lcd_draw_standard_ui("Touch: Re-calibrated");
+            }
+        }
+    }
+    else
+    {
+        key0_pressed = 0;
+    }
+}
+
+/**
+ * @brief       处理主循环触摸检测和绘制
+ * @param       无
+ * @retval      无
+ */
+void tp_handle_main_loop(void)
+{
+    /* 触摸屏扫描 */
+    tp_dev.scan(0);  /* 扫描触摸屏，使用屏幕坐标模式 */
+    
+    if (tp_dev.sta & TP_PRES_DOWN)  /* 触摸屏被按下 */
+    {
+        /* 检查坐标有效性 */
+        if (tp_dev.x[0] < lcddev.width && tp_dev.y[0] < lcddev.height && 
+            tp_dev.x[0] != 0xFFFF && tp_dev.y[0] != 0xFFFF)
+        {
+            /* 在触摸区域内画红点 */
+            if (tp_dev.y[0] > 160)  /* 只在下方区域画点，避免覆盖文字 */
+            {
+                tp_draw_big_point(tp_dev.x[0], tp_dev.y[0], RED);
+            }
+            
+            /* 显示当前坐标 */
+            tp_show_coordinates(tp_dev.x[0], tp_dev.y[0]);
+        }
+    }
+}
+
+/**
+ * @brief       显示触摸坐标
+ * @param       x, y: 触摸坐标
+ * @retval      无
+ */
+void tp_show_coordinates(uint16_t x, uint16_t y)
+{
+    char coord_str[50];
+    sprintf(coord_str, "X:%03d Y:%03d     ", x, y);
+    lcd_show_string(200, 90, 100, 32, 12, coord_str, BLUE);
 } 

@@ -2,6 +2,7 @@
 #define __NT35310_ALIENTEK_H
 
 #include "main.h"
+#include "stdbool.h"
 
 /* 
  * ============================================================================
@@ -119,6 +120,16 @@ void lcd_draw_rectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint
 
 void lcd_show_char(uint16_t x, uint16_t y, char chr, uint8_t size, uint8_t mode, uint16_t color);                       /* 显示一个字符 */
 void lcd_show_string(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t size, char *p, uint16_t color);   /* 显示字符串 */
+
+/* 界面管理函数 */
+void lcd_draw_standard_ui(const char* status_text);    /* 绘制标准界面 */
+void lcd_show_splash_screen(void);                     /* 显示启动界面 */
+void lcd_show_device_info(void);                       /* 显示设备信息 */
+
+/* 设备初始化管理函数 */
+uint8_t device_init_all(void);                        /* 初始化所有设备 */
+uint8_t device_init_touch(bool force_calibration);    /* 初始化触摸屏 */
+uint8_t device_init_sdcard(void);                     /* 初始化SD卡 */
 
 /* NT35310初始化序列 */
 void lcd_ex_nt35310_reginit(void);

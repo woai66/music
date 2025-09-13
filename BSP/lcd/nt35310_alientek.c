@@ -15,6 +15,8 @@
 #include "nt35310_alientek.h"
 #include "fsmc.h"
 #include "lcdfont.h"
+#include "hr2046.h"
+#include "sdio_sdcard.h"
 
 /* ============================================================================
  * 全局变量定义
@@ -1176,4 +1178,175 @@ void lcd_init(void)
     
     /* 清屏 */
     lcd_clear(WHITE);
+}
+
+/* ============================================================================
+ * 界面管理函数
+ * ============================================================================ */
+
+/**
+ * @brief       绘制标准界面
+ * @param       status_text: 状态文字
+ * @retval      无
+ */
+void lcd_draw_standard_ui(const char* status_text)
+{
+  /* 确保背景色为白色 */
+  g_back_color = WHITE;
+  lcd_clear(WHITE);
+  
+  /* 绘制标准界面 */
+  lcd_show_string(10, 10, 300, 32, 16, "STM32 Music Player", BLACK);
+  lcd_show_string(10, 40, 300, 32, 16, (char*)status_text, BLUE);
+  
+  /* 绘制边框 */
+  lcd_draw_rectangle(5, 120, 315, 470, BLACK);
+  lcd_show_string(10, 130, 300, 32, 12, "Touch area - Draw here", BLACK);
+}
+
+/**
+ * @brief       显示启动界面
+ * @param       无
+ * @retval      无
+ */
+void lcd_show_splash_screen(void)
+{
+  /* 设置背景色为白色 */
+  g_back_color = WHITE;
+  lcd_clear(WHITE);
+  
+  /* 显示启动信息 */
+  lcd_show_string(10, 10, 300, 32, 16, "STM32 Music Player", BLACK);
+  lcd_show_string(10, 40, 300, 32, 16, "Initializing...", BLUE);
+  
+  /* 显示LCD ID信息 */
+  char text[30];
+  sprintf(text, "LCD ID: 0x%X", lcddev.id);
+  lcd_show_string(10, 70, 300, 32, 12, text, RED);
+}
+
+/**
+ * @brief       显示设备信息
+ * @param       无
+ * @retval      无
+ */
+void lcd_show_device_info(void)
+{
+  char info_str[50];
+  
+  /* 显示LCD信息 */
+  sprintf(info_str, "LCD: %dx%d, Dir:%d", lcddev.width, lcddev.height, lcddev.dir);
+  lcd_show_string(10, 90, 300, 16, 12, info_str, BLUE);
+}
+
+/* ============================================================================
+ * 设备初始化管理函数
+ * ============================================================================ */
+
+/**
+ * @brief       初始化触摸屏设备
+ * @param       force_calibration: 是否强制校准
+ * @retval      0: 成功, 1: 失败
+ */
+uint8_t device_init_touch(bool force_calibration)
+{
+  if (force_calibration)
+  {
+    /* 强制重新校准 */
+    tp_dev.touchtype = 0;
+    tp_dev.touchtype |= lcddev.dir & 0X01;
+    tp_adjust();
+    tp_save_adjust_data();
+    
+    /* 绘制界面用于触控 */
+    lcd_draw_standard_ui("Touch: Calibrated");
+    return 0;
+  }
+  else
+  {
+    uint8_t tp_init_result = tp_dev.init();
+    if (tp_init_result == 0)
+    {
+      lcd_show_string(10, 90, 300, 32, 12, "Touch: Ready", BLUE);
+      lcd_draw_standard_ui("Touch: Ready");
+      return 0;
+    }
+    else
+    {
+      lcd_show_string(10, 90, 300, 32, 12, "Touch: Error", RED);
+      return 1;
+    }
+  }
+}
+
+/**
+ * @brief       初始化SD卡设备
+ * @param       无
+ * @retval      0: 成功, 其他: 失败代码
+ */
+uint8_t device_init_sdcard(void)
+{
+  /* 初始化SD卡 */
+  lcd_show_string(10, 110, 300, 32, 12, "Initializing SD card...", BLUE);
+  HAL_Delay(100);  /* 给LCD一点时间显示 */
+  
+  uint8_t sd_init_result = sd_init();
+  if (sd_init_result == 0)
+  {
+    lcd_show_string(10, 110, 300, 32, 12, "SD Card: OK        ", GREEN);
+    sd_show_complete_info();  /* 显示完整SD卡信息 */
+    
+    /* 添加按键说明 */
+    lcd_show_string(10, 260, 300, 16, 12, "KEY0: Re-calibrate touch", BLACK);
+    lcd_show_string(10, 280, 300, 16, 12, "KEY1: Test SD read sector 0", BLACK);
+    return 0;
+  }
+  else
+  {
+    char error_str[40];
+    sprintf(error_str, "SD Card: Error (code:%d)", sd_init_result);
+    lcd_show_string(10, 110, 300, 32, 12, error_str, RED);
+    lcd_show_string(10, 130, 300, 32, 12, "Please check SD card", RED);
+    return sd_init_result;
+  }
+}
+
+/**
+ * @brief       初始化所有设备
+ * @param       无
+ * @retval      0: 全部成功, 其他: 有设备失败
+ */
+uint8_t device_init_all(void)
+{
+  uint8_t error_count = 0;
+  
+  /* 显示启动界面 */
+  lcd_show_splash_screen();
+  lcd_show_device_info();
+  
+  /* 检查是否需要强制校准 (KEY0按下) */
+  bool force_calibration = false;
+  if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* KEY0按下 */
+  {
+    force_calibration = true;
+    lcd_show_string(10, 90, 300, 32, 12, "Force Calibration", RED);
+    HAL_Delay(1000);
+  }
+  
+  /* 初始化触摸屏 */
+  if (device_init_touch(force_calibration) != 0)
+  {
+    error_count++;
+  }
+  
+  /* 初始化SD卡 其实已经在最开头初始化了 */
+  // if (device_init_sdcard() != 0)
+  // {
+  //   error_count++;
+  // }
+  
+  /* TODO: 初始化音频设备 */
+  /* if (device_init_audio() != 0) error_count++; */
+  
+  return error_count;
 } 

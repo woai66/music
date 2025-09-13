@@ -35,42 +35,31 @@ HAL_SD_CardInfoTypeDef g_sd_card_info_handle;
 uint8_t sd_init(void)
 {
     HAL_StatusTypeDef result;
-    
+
+    /*重复初始化，注释*/
+
     /* 先使用CubeMX的初始化，但我们需要修正一些参数 */
-    MX_SDIO_SD_Init();
+    // MX_SDIO_SD_Init();
     
     /* 重新配置关键参数以提高兼容性 */
-    hsd.Init.ClockDiv = SDIO_TRANSFER_CLK_DIV;                         /* 修正时钟分频，避免过快 */
-    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;  /* 启用硬件流控 */
-    hsd.Init.BusWide = SDIO_BUS_WIDE_1B;                               /* 先用1位模式，更稳定 */
+    /*注释掉，使用我在Cubemx的配置*/
+
+    // hsd.Init.ClockDiv = SDIO_TRANSFER_CLK_DIV_MY;                         /* 修正时钟分频，避免过快 */
+    // hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;  /* 启用硬件流控 */
+    // hsd.Init.BusWide = SDIO_BUS_WIDE_1B;                               /* 先用1位模式，更稳定 */
     
     /* 重新初始化以应用新参数 */
-    result = HAL_SD_Init(&hsd);
-    if (result != HAL_OK)
-    {
-        return 1;   /* 初始化失败 */
-    }
+    // result = HAL_SD_Init(&hsd);
+    // if (result != HAL_OK)
+    // {
+    //     return 1;   /* 初始化失败 */
+    // }
     
     /* 检查SD卡状态 */
     HAL_SD_CardStateTypeDef cardState = HAL_SD_GetCardState(&hsd);
     if (cardState != HAL_SD_CARD_TRANSFER)
     {
         return 2;   /* SD卡状态异常 */
-    }
-    
-    /* 尝试配置4位宽总线（渐进式，如果失败就继续使用1位模式） */
-    result = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B);
-    if (result != HAL_OK)
-    {
-        /* 4位模式失败，保持1位模式，这对大多数SD卡仍然有效 */
-        /* 不返回错误，继续使用1位模式 */
-        
-        /* 可选：再次确认1位模式工作正常 */
-        result = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_1B);
-        if (result != HAL_OK)
-        {
-            return 3;   /* 连1位模式都失败 */
-        }
     }
     
     return 0;   /* 初始化成功 */
@@ -294,4 +283,48 @@ uint8_t sd_test_read(uint32_t secaddr, uint32_t seccnt)
     }
 
     return sta;
+}
+
+/* ============================================================================
+ * SD卡测试管理函数
+ * ============================================================================ */
+
+/**
+ * @brief       处理KEY1按键SD卡测试
+ * @param       无
+ * @retval      无
+ */
+void sd_handle_key_test(void)
+{
+    static uint8_t key1_pressed = 0;
+    
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* KEY1按下 */
+    {
+        if (!key1_pressed)
+        {
+            key1_pressed = 1;
+            HAL_Delay(50);  /* 消抖 */
+            
+            if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* 确认按下 */
+            {
+                /* 测试SD卡读取 */
+                sd_test_read(0, 1);  /* 读取第0扇区 */
+            }
+        }
+    }
+    else
+    {
+        key1_pressed = 0;
+    }
+}
+
+/**
+ * @brief       显示完整SD卡信息（信息+调试信息）
+ * @param       无
+ * @retval      无
+ */
+void sd_show_complete_info(void)
+{
+    show_sdcard_info();     /* 显示基本信息 */
+    show_sd_debug_info();   /* 显示调试信息 */
 } 

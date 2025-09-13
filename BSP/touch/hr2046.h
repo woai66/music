@@ -149,4 +149,9 @@ uint16_t tp_test_spi(void);                 /* 测试SPI通信 */
 /* 兼容性函数 */
 bool hr2046_read(uint16_t *x, uint16_t *y, uint16_t *z);          /* 兼容旧接口 */
 
+/* 触摸屏测试管理函数 */
+void tp_handle_calibration_check(void);        /* 处理校准检查 */
+void tp_handle_main_loop(void);                /* 处理主循环触摸 */
+void tp_show_coordinates(uint16_t x, uint16_t y); /* 显示坐标 */
+
 #endif /* HR2046_H */ 

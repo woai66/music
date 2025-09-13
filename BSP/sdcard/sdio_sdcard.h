@@ -34,7 +34,7 @@
 
 /******************************************************************************************/
 /* SDIO传输时钟分频设置 */
-#define SDIO_TRANSFER_CLK_DIV           0x02    /* SDIO传输时钟频率 = SDIO_CLK / [CLKDIV + 2] */
+#define SDIO_TRANSFER_CLK_DIV_MY           0x02    /* SDIO传输时钟频率 = SDIO_CLK / [CLKDIV + 2] */
                                                 /* STM32F103 SDIO_CLK = 72MHz / 2 = 36MHz */
                                                 /* 传输时钟 = 36MHz / (2+2) = 9MHz < 25MHz(最大值) */
 
@@ -61,5 +61,9 @@ uint8_t sd_write_disk(uint8_t *pbuf, uint32_t saddr, uint32_t cnt);
 void show_sdcard_info(void);
 uint8_t sd_test_read(uint32_t secaddr, uint32_t seccnt);
 void show_sd_debug_info(void);
+
+/* SD卡测试管理函数 */
+void sd_handle_key_test(void);              /* 处理按键测试 */
+void sd_show_complete_info(void);           /* 显示完整SD卡信息 */
 
 #endif 
