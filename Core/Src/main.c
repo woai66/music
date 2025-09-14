@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fatfs.h"
 #include "sdio.h"
 #include "spi.h"
 #include "usart.h"
@@ -28,11 +29,13 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "nt35310_alientek.h"
 #include "hr2046.h"
 #include "vs1053_port.h"
 #include "lcdfont.h"
 #include "sdio_sdcard.h"
+#include "audio_player.h"
 
 
 /* USER CODE END Includes */
@@ -61,7 +64,10 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+// 音频播放器按键处理函数声明
+void audio_handle_key1_play(void);      /* KEY1: 播放/暂停 */
+void audio_handle_key2_next(void);      /* KEY2: 下一首 */
+void audio_handle_key0_prev(void);      /* KEY0: 上一首 */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -100,10 +106,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_FSMC_Init();
-  MX_SDIO_SD_Init();//SD卡初始化
+  MX_SDIO_SD_Init();
   MX_SPI1_Init();
-  MX_SPI2_Init();
   MX_USART1_UART_Init();
+  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
   /* 初始化LCD - 使用正点原子的方式 */
   lcd_init();
@@ -121,16 +127,21 @@ int main(void)
 
   /*debug info*/
   // sd_show_complete_info();
-  
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* 处理按键输入 */
-    tp_handle_calibration_check();    /* KEY0: 触摸屏校准 */
-    sd_handle_key_test();             /* KEY1: SD卡测试 */
+    /* 音频播放器按键控制 */
+    audio_handle_key0_prev();         /* KEY0: 上一首 */
+    audio_handle_key1_play();         /* KEY1: 播放/暂停 */
+    audio_handle_key2_next();         /* KEY2: 下一首 */
+    //  TODO:
+    //    -播放音乐亟待解决
+    /* 音频播放任务 */
+    audio_player_task();
     
     /* 处理触摸屏输入 */
     tp_handle_main_loop();
@@ -182,6 +193,140 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+ * @brief KEY1按键处理 - 播放/暂停控制
+ */
+void audio_handle_key1_play(void)
+{
+    static uint8_t key1_pressed = 0;
+    
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* KEY1按下 */
+    {
+        if (!key1_pressed)
+        {
+            key1_pressed = 1;
+            HAL_Delay(50);  /* 消抖 */
+            
+            if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* 确认按下 */
+            {
+                if (audio_player_is_playing())
+                {
+                    /* 正在播放，则暂停 */
+                    audio_player_pause();
+                    lcd_show_string(10, 320, 300, 16, 12, "Audio: PAUSED", YELLOW);
+                }
+                else if (audio_player_is_paused())
+                {
+                    /* 已暂停，则恢复播放 */
+                    audio_player_resume();
+                    lcd_show_string(10, 320, 300, 16, 12, "Audio: RESUMED", GREEN);
+                }
+                else
+                {
+                    /* 未播放，开始播放 */
+                    if (audio_player_play_current())
+                    {
+                        lcd_show_string(10, 320, 300, 16, 12, "Audio: PLAYING", GREEN);
+                    }
+                    else
+                    {
+                        /* 如果没有当前文件，尝试测试播放 */
+                        audio_player_test_play();
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        key1_pressed = 0;
+    }
+}
+
+/**
+ * @brief KEY2按键处理 - 下一首
+ */
+void audio_handle_key2_next(void)
+{
+    static uint8_t key2_pressed = 0;
+    
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_2) == GPIO_PIN_RESET)  /* KEY2按下 */
+    {
+        if (!key2_pressed)
+        {
+            key2_pressed = 1;
+            HAL_Delay(50);  /* 消抖 */
+            
+            if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_2) == GPIO_PIN_RESET)  /* 确认按下 */
+            {
+                if (audio_player_next())
+                {
+                    lcd_show_string(10, 320, 300, 16, 12, "Audio: NEXT SONG", BLUE);
+                    
+                    /* 显示当前文件名 */
+                    const char* filename = audio_player_get_current_file();
+                    if (filename && strlen(filename) > 0)
+                    {
+                        char display_name[50];
+                        snprintf(display_name, sizeof(display_name), "Playing: %.30s", filename);
+                        lcd_show_string(10, 340, 300, 16, 12, display_name, BLACK);
+                    }
+                }
+                else
+                {
+                    lcd_show_string(10, 320, 300, 16, 12, "Audio: No next song", RED);
+                }
+            }
+        }
+    }
+    else
+    {
+        key2_pressed = 0;
+    }
+}
+
+/**
+ * @brief KEY0按键处理 - 上一首
+ */
+void audio_handle_key0_prev(void)
+{
+    static uint8_t key0_pressed = 0;
+    
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* KEY0按下 */
+    {
+        if (!key0_pressed)
+        {
+            key0_pressed = 1;
+            HAL_Delay(50);  /* 消抖 */
+            
+            if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == GPIO_PIN_RESET)  /* 确认按下 */
+            {
+                if (audio_player_prev())
+                {
+                    lcd_show_string(10, 320, 300, 16, 12, "Audio: PREV SONG", BLUE);
+                    
+                    /* 显示当前文件名 */
+                    const char* filename = audio_player_get_current_file();
+                    if (filename && strlen(filename) > 0)
+                    {
+                        char display_name[50];
+                        snprintf(display_name, sizeof(display_name), "Playing: %.30s", filename);
+                        lcd_show_string(10, 340, 300, 16, 12, display_name, BLACK);
+                    }
+                }
+                else
+                {
+                    lcd_show_string(10, 320, 300, 16, 12, "Audio: No prev song", RED);
+                }
+            }
+        }
+    }
+    else
+    {
+        key0_pressed = 0;
+    }
+}
 
 /* USER CODE END 4 */
 

@@ -65,5 +65,6 @@ void show_sd_debug_info(void);
 /* SD卡测试管理函数 */
 void sd_handle_key_test(void);              /* 处理按键测试 */
 void sd_show_complete_info(void);           /* 显示完整SD卡信息 */
+void sd_handle_filesystem_test(void);       /* 处理文件系统测试 (KEY2) */
 
 #endif 

@@ -17,7 +17,7 @@ extern "C" {
 #define VS_RST_L()      HAL_GPIO_WritePin(GPIOE, GPIO_PIN_6, GPIO_PIN_RESET)
 #define VS_DREQ_READ()  (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET)
 
-extern SPI_HandleTypeDef hspi2; // SPI2 for VS1053
+extern SPI_HandleTypeDef hspi1; // SPI1 for VS1053
 
 void vs1053_port_init(void);
 void vs1053_port_speed_low(void);

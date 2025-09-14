@@ -42,9 +42,9 @@ extern const unsigned char asc2_1206[95][12];
 extern const unsigned char asc2_1608[95][16];
 
 /* 24*24 ASICII字符集点阵 */
-extern const unsigned char asc2_2412[95][36];
+// extern const unsigned char asc2_2412[95][36]; // 已移除以节省RAM
 
 /* 32*32 ASCII字符集点阵 */
-extern const unsigned char asc2_3216[95][64];
+// extern const unsigned char asc2_3216[95][64]; // 已移除以节省RAM
 
 #endif 

@@ -210,5 +210,6 @@ const unsigned char asc2_1608[95][16]={
 
 /* 由于Flash空间限制，这里只包含常用的12x12和16x16字体 */
 /* 如需24x24和32x32字体，请根据需要添加 */
-const unsigned char asc2_2412[95][36] = {0}; // 占位符
-const unsigned char asc2_3216[95][64] = {0}; // 占位符 
+// 占位符数组已移除以节省RAM空间
+// const unsigned char asc2_2412[95][36] = {0}; 
+// const unsigned char asc2_3216[95][64] = {0}; 

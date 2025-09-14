@@ -20,6 +20,7 @@
 #include "sdio_sdcard.h"
 #include "nt35310_alientek.h"
 #include "sdio.h"  /* 包含CubeMX生成的SDIO配置 */
+#include "filesystem.h"  /* 包含文件系统管理 */
 
 /* 使用CubeMX生成的外部句柄，而不是我们自己的 */
 extern SD_HandleTypeDef hsd;
@@ -327,4 +328,48 @@ void sd_show_complete_info(void)
 {
     show_sdcard_info();     /* 显示基本信息 */
     show_sd_debug_info();   /* 显示调试信息 */
+}
+
+/**
+ * @brief       处理KEY2按键文件系统测试
+ * @param       无
+ * @retval      无
+ */
+void sd_handle_filesystem_test(void)
+{
+    static uint8_t key2_pressed = 0;
+    
+    if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_2) == GPIO_PIN_RESET)  /* KEY2按下 */
+    {
+        if (!key2_pressed)
+        {
+            key2_pressed = 1;
+            HAL_Delay(50);  /* 消抖 */
+            
+            if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_2) == GPIO_PIN_RESET)  /* 确认按下 */
+            {
+                /* 清屏并测试文件系统 */
+                lcd_clear(WHITE);
+                lcd_show_string(10, 10, 300, 32, 16, "File System Test", BLACK);
+                
+                /* 运行文件系统测试 */
+                FS_Status_t result = fs_test_demo();
+                
+                if (result == FS_STATUS_OK)
+                {
+                    lcd_show_string(10, 40, 300, 16, 12, "FS Test: SUCCESS", GREEN);
+                }
+                else
+                {
+                    char error_str[50];
+                    sprintf(error_str, "FS Test: FAILED (%s)", fs_get_status_string(result));
+                    lcd_show_string(10, 40, 300, 16, 12, error_str, RED);
+                }
+            }
+        }
+    }
+    else
+    {
+        key2_pressed = 0;
+    }
 } 

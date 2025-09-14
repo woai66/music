@@ -17,6 +17,8 @@
 #include "lcdfont.h"
 #include "hr2046.h"
 #include "sdio_sdcard.h"
+#include "vs1053_driver.h"
+#include "audio_player.h"
 
 /* ============================================================================
  * 全局变量定义
@@ -385,13 +387,15 @@ void lcd_show_char(uint16_t x, uint16_t y, char chr, uint8_t size, uint8_t mode,
             pfont = (uint8_t *)asc2_1608[chr];  /* 调用1608字体 */
             break;
 
-        case 24:
-            pfont = (uint8_t *)asc2_2412[chr];  /* 调用2412字体 */
-            break;
 
-        case 32:
-            pfont = (uint8_t *)asc2_3216[chr];  /* 调用3216字体 */
-            break;
+
+        // case 24:
+        //     pfont = (uint8_t *)asc2_2412[chr];  /* 调用2412字体 */
+        //     break;
+        //
+        // case 32:
+        //     pfont = (uint8_t *)asc2_3216[chr];  /* 调用3216字体 */
+        //     break;
 
         default:
             return ;                            /* 没有的字库 */
@@ -1299,6 +1303,7 @@ uint8_t device_init_sdcard(void)
     /* 添加按键说明 */
     lcd_show_string(10, 260, 300, 16, 12, "KEY0: Re-calibrate touch", BLACK);
     lcd_show_string(10, 280, 300, 16, 12, "KEY1: Test SD read sector 0", BLACK);
+    lcd_show_string(10, 300, 300, 16, 12, "KEY2: File system test", BLACK);
     return 0;
   }
   else
@@ -1308,6 +1313,54 @@ uint8_t device_init_sdcard(void)
     lcd_show_string(10, 110, 300, 32, 12, error_str, RED);
     lcd_show_string(10, 130, 300, 32, 12, "Please check SD card", RED);
     return sd_init_result;
+  }
+}
+
+/**
+ * @brief       初始化音频设备 (VS1053)
+ * @param       无
+ * @retval      0: 成功, 1: 失败
+ */
+uint8_t device_init_audio(void)
+{
+  lcd_show_string(10, 110, 300, 16, 12, "Initializing Audio...", BLUE);
+  
+  /* 显示调试信息 */
+  lcd_show_string(10, 130, 300, 16, 12, "Reset VS1053...", CYAN);
+  HAL_Delay(500);
+  
+  if (vs1053_init()) {
+    lcd_show_string(10, 130, 300, 16, 12, "VS1053: OK", GREEN);
+    
+    /* 显示测试结果 */
+    uint16_t test_val = vs1053_read_cmd(SPI_HDAT0);
+    char test_str[50];
+    sprintf(test_str, "HDAT0: 0x%04X", test_val);
+    lcd_show_string(10, 150, 300, 16, 12, test_str, YELLOW);
+    
+    /* 初始化音频播放器 */
+    if (audio_player_init()) {
+      lcd_show_string(10, 170, 300, 16, 12, "Audio Player: OK", GREEN);
+      return 0;
+    } else {
+      lcd_show_string(10, 170, 300, 16, 12, "Audio Player: FAIL", RED);
+      return 1;
+    }
+  } else {
+    lcd_show_string(10, 130, 300, 16, 12, "VS1053: FAIL", RED);
+    
+    /* 显示调试信息 */
+    char dreq_str[50];
+    sprintf(dreq_str, "DREQ: %s", VS_DREQ_READ() ? "HIGH" : "LOW");
+    lcd_show_string(10, 150, 300, 16, 12, dreq_str, RED);
+    
+    /* 尝试读取MODE寄存器 */
+    uint16_t mode_val = vs1053_read_cmd(SPI_MODE);
+    char mode_str[50];
+    sprintf(mode_str, "MODE: 0x%04X", mode_val);
+    lcd_show_string(10, 170, 300, 16, 12, mode_str, RED);
+    
+    return 1;
   }
 }
 
@@ -1345,8 +1398,11 @@ uint8_t device_init_all(void)
   //   error_count++;
   // }
   
-  /* TODO: 初始化音频设备 */
-  /* if (device_init_audio() != 0) error_count++; */
+  /* 初始化音频设备 */
+  if (device_init_audio() != 0)
+  {
+    error_count++;
+  }
   
   return error_count;
 } 
