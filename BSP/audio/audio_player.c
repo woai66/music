@@ -81,10 +81,37 @@ bool audio_player_play_file(const char* filename)
     /* 停止当前播放 */
     audio_player_stop();
     
+    /* 显示尝试打开的文件路径 */
+    char path_debug[80];
+    snprintf(path_debug, sizeof(path_debug), "Opening: %.50s", filename);
+    lcd_show_string(10, 200, 300, 16, 12, path_debug, BLUE);
+    
     /* 打开文件 */
     res = f_open(&audio_file, filename, FA_READ);
     if (res != FR_OK) {
-        lcd_show_string(10, 200, 300, 16, 12, "File open failed!", RED);
+        char error_msg[60];
+        snprintf(error_msg, sizeof(error_msg), "File open failed! Error: %d", (int)res);
+        lcd_show_string(10, 220, 300, 16, 12, error_msg, RED);
+        
+        /* 显示具体的FatFS错误信息 */
+        const char* error_desc = "Unknown";
+        switch(res) {
+            case FR_NO_FILE: error_desc = "No file"; break;
+            case FR_NO_PATH: error_desc = "No path"; break;
+            case FR_INVALID_NAME: error_desc = "Invalid name"; break;
+            case FR_DENIED: error_desc = "Access denied"; break;
+            case FR_NOT_READY: error_desc = "Not ready"; break;
+            case FR_WRITE_PROTECTED: error_desc = "Write protected"; break;
+            case FR_DISK_ERR: error_desc = "Disk error"; break;
+            case FR_INT_ERR: error_desc = "Internal error"; break;
+            case FR_NOT_ENABLED: error_desc = "Not enabled"; break;
+            case FR_NO_FILESYSTEM: error_desc = "No filesystem"; break;
+        }
+        
+        char detailed_error[80];
+        snprintf(detailed_error, sizeof(detailed_error), "FatFS: %.30s", error_desc);
+        lcd_show_string(10, 240, 300, 16, 12, detailed_error, RED);
+        
         return false;
     }
     
@@ -96,6 +123,12 @@ bool audio_player_play_file(const char* filename)
     g_audio_player.playing = true;
     g_audio_player.paused = false;
     g_audio_player.play_time = 0;
+    
+    /* 设置音量 - 参考正点原子的方法 */
+    vs1053_set_volume(50);  /* 设置音量为50 (0-100) */
+    
+    /* 设置高速SPI模式 */
+    vs1053_port_speed_high();
     
     /* 开始播放 */
     if (!vs1053_play_start()) {
@@ -293,7 +326,9 @@ const char* audio_player_get_current_file(void)
  */
 void audio_player_task(void)
 {
-    UINT bytes_read;
+    static UINT bytes_read = 0;
+    static uint16_t buffer_index = 0;
+    static bool need_new_data = true;
     FRESULT res;
     
     if (!g_audio_player.playing || g_audio_player.paused || !file_opened) {
@@ -305,23 +340,45 @@ void audio_player_task(void)
         return;
     }
     
-    /* 读取音频数据 */
-    res = f_read(&audio_file, audio_buffer, sizeof(audio_buffer), &bytes_read);
-    if (res != FR_OK || bytes_read == 0) {
-        /* 文件读取完毕或出错，停止播放 */
-        audio_player_stop();
-        lcd_show_string(10, 240, 300, 16, 12, "Playback finished", BLUE);
-        return;
+    /* 需要读取新数据 */
+    if (need_new_data) {
+        res = f_read(&audio_file, audio_buffer, sizeof(audio_buffer), &bytes_read);
+        if (res != FR_OK || bytes_read == 0) {
+            /* 文件读取完毕或出错，停止播放 */
+            audio_player_stop();
+            lcd_show_string(10, 240, 300, 16, 12, "Playback finished", BLUE);
+            return;
+        }
+        buffer_index = 0;
+        need_new_data = false;
     }
     
-    /* 发送数据到VS1053 */
-    vs1053_play_buffer(audio_buffer, bytes_read);
+    /* 发送32字节数据到VS1053 - 参考正点原子的方法 */
+    if (buffer_index < bytes_read) {
+        uint16_t send_size = (bytes_read - buffer_index >= 32) ? 32 : (bytes_read - buffer_index);
+        vs1053_write_data(audio_buffer + buffer_index, send_size);
+        buffer_index += send_size;
+        
+        /* 调试信息：显示数据传输状态 */
+        static uint32_t transfer_count = 0;
+        transfer_count++;
+        if (transfer_count % 100 == 0) {  /* 每传输100次显示一次 */
+            char debug_str[60];
+            sprintf(debug_str, "Sent: %lu KB", (transfer_count * 32) / 1024);
+            lcd_show_string(10, 280, 300, 16, 12, debug_str, YELLOW);
+        }
+        
+        /* 如果当前缓冲区数据发送完毕，标记需要新数据 */
+        if (buffer_index >= bytes_read) {
+            need_new_data = true;
+        }
+    }
     
     /* 更新播放时间显示 */
     static uint32_t last_time_update = 0;
     uint32_t current_tick = HAL_GetTick();
     if (current_tick - last_time_update > 1000) {  /* 每秒更新一次 */
-        uint32_t play_time = audio_player_get_play_time();
+        uint32_t play_time = vs1053_get_decode_time();
         char time_str[50];
         sprintf(time_str, "Time: %02d:%02d", play_time / 60, play_time % 60);
         lcd_show_string(10, 260, 300, 16, 12, time_str, CYAN);
@@ -341,7 +398,7 @@ bool audio_player_next(void)
     }
     
     /* 获取音频文件列表 */
-    if (fs_get_audio_files(&g_file_list, "/") != FS_STATUS_OK) {
+    if (fs_get_audio_files("0:/MUSIC", &g_file_list) != FS_STATUS_OK) {
         return false;
     }
     
@@ -382,10 +439,8 @@ bool audio_player_next(void)
     
     /* 播放新文件 */
     g_audio_player.current_index = current_idx;
-    char full_path[128];
-    sprintf(full_path, "/%s", g_file_list.files[current_idx].name);
     
-    return audio_player_play_file(full_path);
+    return audio_player_play_file(g_file_list.files[current_idx].path);
 }
 
 /**
@@ -400,7 +455,7 @@ bool audio_player_prev(void)
     }
     
     /* 获取音频文件列表 */
-    if (fs_get_audio_files(&g_file_list, "/") != FS_STATUS_OK) {
+    if (fs_get_audio_files("0:/MUSIC", &g_file_list) != FS_STATUS_OK) {
         return false;
     }
     
@@ -442,10 +497,8 @@ bool audio_player_prev(void)
     
     /* 播放新文件 */
     g_audio_player.current_index = current_idx;
-    char full_path[128];
-    sprintf(full_path, "/%s", g_file_list.files[current_idx].name);
     
-    return audio_player_play_file(full_path);
+    return audio_player_play_file(g_file_list.files[current_idx].path);
 }
 
 /* ============================================================================
@@ -459,27 +512,58 @@ bool audio_player_prev(void)
  */
 bool audio_player_test_play(void)
 {
+    /* 清理之前的调试信息 */
+    lcd_fill(10, 140, 310, 220, WHITE);
+    
     if (!audio_player_is_ready()) {
         lcd_show_string(10, 160, 300, 16, 12, "Audio not ready!", RED);
         return false;
     }
     
-    /* 扫描当前目录的音频文件 */
-    if (fs_get_audio_files("/", &g_file_list) != FS_STATUS_OK) {
-        lcd_show_string(10, 160, 300, 16, 12, "No audio files found!", RED);
-        return false;
+    /* 显示文件系统状态 */
+    char fs_status_str[60];
+    sprintf(fs_status_str, "FS Mounted: %s", fs_is_mounted() ? "YES" : "NO");
+    lcd_show_string(10, 120, 300, 16, 12, fs_status_str, fs_is_mounted() ? GREEN : RED);
+    
+    /* 扫描当前目录的音频文件 - 使用正点原子的路径格式 */
+    FS_Status_t scan_result = fs_get_audio_files("0:/MUSIC", &g_file_list);
+    if (scan_result != FS_STATUS_OK) {
+        char debug_msg[60];
+        sprintf(debug_msg, "Scan failed! Status: %d", (int)scan_result);
+        lcd_show_string(10, 160, 300, 16, 12, debug_msg, RED);
+        
+        /* 尝试扫描根目录 */
+        lcd_show_string(10, 180, 300, 16, 12, "Trying root directory...", YELLOW);
+        scan_result = fs_get_audio_files("0:/", &g_file_list);
+        if (scan_result != FS_STATUS_OK) {
+            lcd_show_string(10, 200, 300, 16, 12, "Root scan also failed!", RED);
+            return false;
+        }
     }
     
     if (g_file_list.count == 0) {
-        lcd_show_string(10, 160, 300, 16, 12, "No MP3 files found!", RED);
+        char debug_msg[60];
+        sprintf(debug_msg, "Found 0 files in: %s", g_file_list.current_path);
+        lcd_show_string(10, 160, 300, 16, 12, debug_msg, RED);
         return false;
     }
     
+    /* 显示找到的文件数量 */
+    char debug_msg[60];
+    sprintf(debug_msg, "Found %d files in: %s", g_file_list.count, g_file_list.current_path);
+    lcd_show_string(10, 140, 300, 16, 12, debug_msg, GREEN);
+    
+    /* 显示第一个文件的信息 */
+    char file_info[80];
+    snprintf(file_info, sizeof(file_info), "File[0]: %.40s", g_file_list.files[0].name);
+    lcd_show_string(10, 160, 300, 16, 12, file_info, CYAN);
+    
+    char path_info[80];
+    snprintf(path_info, sizeof(path_info), "Path: %.50s", g_file_list.files[0].path);
+    lcd_show_string(10, 180, 300, 16, 12, path_info, CYAN);
+    
     /* 播放第一个音频文件 */
-    char full_path[128];
-    sprintf(full_path, "/%s", g_file_list.files[0].name);
+    lcd_show_string(10, 200, 300, 16, 12, "Starting playback...", GREEN);
     
-    lcd_show_string(10, 160, 300, 16, 12, "Starting playback...", GREEN);
-    
-    return audio_player_play_file(full_path);
+    return audio_player_play_file(g_file_list.files[0].path);
 } 

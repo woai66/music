@@ -23,6 +23,10 @@
 /* FatFS相关头文件 */
 #include "fatfs.h"
 
+/* 外部变量声明 */
+extern FATFS SDFatFS;    /* File system object for SD logical drive */
+extern char SDPath[4];   /* SD logical drive path */
+
 /* 全局变量 */
 FileList_t g_file_list;
 static bool fs_mounted = false;
@@ -55,8 +59,9 @@ FS_Status_t fs_mount(void)
 {
     FRESULT res;
     
-    /* 初始化FatFS */
-    MX_FATFS_Init();
+    /* 初始化FatFS cubemx 已经初始化*/
+
+    // MX_FATFS_Init();
     
     /* 挂载SD卡文件系统 */
     res = f_mount(&SDFatFS, SDPath, 1);
@@ -158,9 +163,10 @@ FS_Status_t fs_get_audio_files(const char* path, FileList_t* file_list)
     if (res != FR_OK) 
     {
         /* 如果目录不存在，尝试根目录 */
-        res = f_opendir(&dir, "/");
+        const char* root_path = (strncmp(path, "0:", 2) == 0) ? "0:/" : "/";
+        res = f_opendir(&dir, root_path);
         if (res != FR_OK) return FS_STATUS_READ_ERROR;
-        strcpy(file_list->current_path, "/");
+        strcpy(file_list->current_path, root_path);
     }
     else
     {

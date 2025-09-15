@@ -130,6 +130,7 @@ void lcd_show_device_info(void);                       /* 显示设备信息 */
 uint8_t device_init_all(void);                        /* 初始化所有设备 */
 uint8_t device_init_touch(bool force_calibration);    /* 初始化触摸屏 */
 uint8_t device_init_sdcard(void);                     /* 初始化SD卡 */
+uint8_t device_init_filesystem(void);                 /* 初始化文件系统 */
 uint8_t device_init_audio(void);                      /* 初始化音频设备 */
 
 /* NT35310初始化序列 */
