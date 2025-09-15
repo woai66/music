@@ -42,6 +42,7 @@ bool audio_player_is_ready(void);
 
 /* 播放控制 */
 bool audio_player_play_file(const char* filename);
+uint8_t audio_player_play_song(const char* filename);  /* 新增：参考正点原子的播放方法 */
 bool audio_player_play_current(void);
 void audio_player_pause(void);
 void audio_player_resume(void);

@@ -89,6 +89,7 @@ bool vs1053_init(void);
 bool vs1053_reset(void);
 bool vs1053_test(void);
 void vs1053_soft_reset(void);
+void vs1053_test_sine_wave(void);
 
 /* 寄存器操作 */
 void vs1053_write_cmd(uint8_t addr, uint16_t data);
@@ -107,6 +108,15 @@ void vs1053_play_pause(void);
 void vs1053_play_resume(void);
 void vs1053_play_stop(void);
 bool vs1053_is_playing(void);
+
+/* 正点原子兼容函数 */
+void vs1053_restart_play(void);      /* 重启播放 */
+void vs1053_set_all(void);           /* 设置所有参数 */
+void vs1053_reset_decode_time(void); /* 重置解码时间 */
+uint8_t vs1053_send_music_data(uint8_t* buf); /* 发送音乐数据(32字节) */
+void vs1053_simple_test(void);              /* 简单的VS1053功能测试 */
+void vs1053_debug_registers(void);          /* 调试所有寄存器状态 */
+void vs1053_set_speaker(uint8_t sw);        /* 设置板载喇叭开关 */
 
 /* 文件播放 */
 bool vs1053_play_file(const char* filename);

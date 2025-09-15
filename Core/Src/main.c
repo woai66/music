@@ -114,6 +114,18 @@ int main(void)
   /* 初始化LCD - 使用正点原子的方式 */
   lcd_init();
   
+  /* 清理LCD显示区域，设置音乐播放器界面 */
+  lcd_fill(0, 0, 320, 480, WHITE);  /* 清屏 */
+  
+  /* 显示音乐播放器标题 */
+  lcd_show_string(10, 30, 300, 24, 16, "STM32 Music Player", BLACK);
+  lcd_show_string(10, 60, 300, 16, 12, "KEY0:Prev | KEY1:Play | KEY2:Next", BLUE);
+  
+  /* 清理调试区域和音乐信息区域 */
+  lcd_fill(10, 50, 310, 120, WHITE);   /* 清理上方调试区 */
+  lcd_fill(10, 140, 310, 300, WHITE);  /* 清理中间调试区 */
+  lcd_fill(10, 320, 310, 400, WHITE);  /* 清理音乐信息区 */
+  
   /*初始化所有外设 都放这*/
 
   uint8_t init_result = device_init_all();
@@ -134,12 +146,20 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* 主循环运行指示器 */
+    static uint32_t loop_counter = 0;
+    loop_counter++;
+    if (loop_counter % 200000 == 0) {  /* 每20万次循环更新一次状态 */
+        char status_str[40];
+        sprintf(status_str, "Music Player Ready [%lu]", loop_counter / 200000);
+        lcd_show_string(10, 10, 300, 16, 12, status_str, BLUE);
+    }
+
     /* 音频播放器按键控制 */
     audio_handle_key0_prev();         /* KEY0: 上一首 */
     audio_handle_key1_play();         /* KEY1: 播放/暂停 */
     audio_handle_key2_next();         /* KEY2: 下一首 */
-    //  TODO:
-    //    -播放音乐亟待解决
+    
     /* 音频播放任务 */
     audio_player_task();
     
@@ -210,31 +230,8 @@ void audio_handle_key1_play(void)
             
             if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3) == GPIO_PIN_RESET)  /* 确认按下 */
             {
-                if (audio_player_is_playing())
-                {
-                    /* 正在播放，则暂停 */
-                    audio_player_pause();
-                    lcd_show_string(10, 320, 300, 16, 12, "Audio: PAUSED", YELLOW);
-                }
-                else if (audio_player_is_paused())
-                {
-                    /* 已暂停，则恢复播放 */
-                    audio_player_resume();
-                    lcd_show_string(10, 320, 300, 16, 12, "Audio: RESUMED", GREEN);
-                }
-                else
-                {
-                    /* 未播放，开始播放 */
-                    if (audio_player_play_current())
-                    {
-                        lcd_show_string(10, 320, 300, 16, 12, "Audio: PLAYING", GREEN);
-                    }
-                    else
-                    {
-                        /* 如果没有当前文件，尝试测试播放 */
-                        audio_player_test_play();
-                    }
-                }
+                /* 播放当前歌曲 */
+                audio_player_test_play();
             }
         }
     }
@@ -262,20 +259,21 @@ void audio_handle_key2_next(void)
             {
                 if (audio_player_next())
                 {
-                    lcd_show_string(10, 320, 300, 16, 12, "Audio: NEXT SONG", BLUE);
+                    /* 清理显示区域 */
+                    lcd_fill(10, 320, 310, 400, WHITE);
                     
                     /* 显示当前文件名 */
                     const char* filename = audio_player_get_current_file();
                     if (filename && strlen(filename) > 0)
                     {
                         char display_name[50];
-                        snprintf(display_name, sizeof(display_name), "Playing: %.30s", filename);
-                        lcd_show_string(10, 340, 300, 16, 12, display_name, BLACK);
+                        snprintf(display_name, sizeof(display_name), "Next: %.35s", filename);
+                        lcd_show_string(10, 320, 300, 16, 12, display_name, BLACK);
                     }
                 }
                 else
                 {
-                    lcd_show_string(10, 320, 300, 16, 12, "Audio: No next song", RED);
+                    lcd_show_string(10, 320, 300, 16, 12, "No next song available", RED);
                 }
             }
         }
@@ -304,20 +302,21 @@ void audio_handle_key0_prev(void)
             {
                 if (audio_player_prev())
                 {
-                    lcd_show_string(10, 320, 300, 16, 12, "Audio: PREV SONG", BLUE);
+                    /* 清理显示区域 */
+                    lcd_fill(10, 320, 310, 400, WHITE);
                     
                     /* 显示当前文件名 */
                     const char* filename = audio_player_get_current_file();
                     if (filename && strlen(filename) > 0)
                     {
                         char display_name[50];
-                        snprintf(display_name, sizeof(display_name), "Playing: %.30s", filename);
-                        lcd_show_string(10, 340, 300, 16, 12, display_name, BLACK);
+                        snprintf(display_name, sizeof(display_name), "Prev: %.35s", filename);
+                        lcd_show_string(10, 320, 300, 16, 12, display_name, BLACK);
                     }
                 }
                 else
                 {
-                    lcd_show_string(10, 320, 300, 16, 12, "Audio: No prev song", RED);
+                    lcd_show_string(10, 320, 300, 16, 12, "No previous song available", RED);
                 }
             }
         }

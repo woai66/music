@@ -79,6 +79,8 @@ void Error_Handler(void);
 #define T_CS_GPIO_Port GPIOF
 #define LED0_Pin GPIO_PIN_5
 #define LED0_GPIO_Port GPIOB
+#define BEEP_Pin GPIO_PIN_8
+#define BEEP_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

@@ -59,9 +59,8 @@ FS_Status_t fs_mount(void)
 {
     FRESULT res;
     
-    /* 初始化FatFS cubemx 已经初始化*/
-
-    // MX_FATFS_Init();
+    /* 初始化FatFS */
+    MX_FATFS_Init();
     
     /* 挂载SD卡文件系统 */
     res = f_mount(&SDFatFS, SDPath, 1);

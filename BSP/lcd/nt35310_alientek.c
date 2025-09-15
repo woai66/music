@@ -1329,21 +1329,21 @@ uint8_t device_init_filesystem(void)
   /* 初始化文件系统 */
   FS_Status_t fs_status = fs_init();
   if (fs_status == FS_STATUS_OK) {
-    // lcd_show_string(10, 90, 300, 16, 12, "FileSystem: OK", GREEN);
+    lcd_show_string(10, 90, 300, 16, 12, "FileSystem: OK", GREEN);
     
     /* 显示文件系统状态 */
     char status_str[50];
     sprintf(status_str, "FS Status: %s", fs_is_mounted() ? "Mounted" : "Not Mounted");
-    // lcd_show_string(10, 110, 300, 16, 12, status_str, fs_is_mounted() ? GREEN : RED);
+    lcd_show_string(10, 110, 300, 16, 12, status_str, fs_is_mounted() ? GREEN : RED);
     
     return 0;
   } else {
-    // lcd_show_string(10, 90, 300, 16, 12, "FileSystem: FAIL", RED);
+    lcd_show_string(10, 90, 300, 16, 12, "FileSystem: FAIL", RED);
     
     /* 显示详细错误信息 */
     char error_str[50];
     sprintf(error_str, "FS Error: %s", fs_get_status_string(fs_status));
-    // lcd_show_string(10, 110, 300, 16, 12, error_str, RED);
+    lcd_show_string(10, 110, 300, 16, 12, error_str, RED);
     
     return 1;
   }
@@ -1431,7 +1431,7 @@ uint8_t device_init_all(void)
   //   error_count++;
   // }
   
-  /* 初始化文件系统 挂载SD卡 */
+  /* 初始化文件系统 */
   if (device_init_filesystem() != 0)
   {
     error_count++;

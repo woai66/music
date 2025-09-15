@@ -95,7 +95,7 @@ typedef struct
 #define BLUE            0x001F      /* 蓝色 */ 
 #define MAGENTA         0XF81F      /* 品红色/紫红色 = BLUE + RED */
 #define YELLOW          0XFFE0      /* 黄色 = GREEN + RED */
-#define CYAN            0X07FF      /* 青色 = GREEN + BLUE */
+#define CYAN            0X070F      /* 青色 = GREEN + BLUE */
 
 /* 函数声明 */
 void lcd_wr_data(volatile uint16_t data);            /* LCD写数据 */
